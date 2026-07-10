@@ -1,6 +1,10 @@
 {
-    "user": "Example Name",
-    "notes": "For managing and testing new features on project 1.",
-    "--role": "Contributor",
-    "--assignee": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+    "members": [
+        {
+            "user": "Example Name",
+            "notes": "For managing and testing new features on project 1.",
+            "--role": "Contributor",
+            "--assignee": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+        }
+    ]
 }
