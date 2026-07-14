@@ -17,7 +17,7 @@ class UserDAO:
 
     def _get_connection(self):
         try:
-            connection = psycop2.connect(
+            connection = psycopg2.connect(
                 host=self.host,
                 database=self.database,
                 user=self.user,
