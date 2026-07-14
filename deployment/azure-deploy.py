@@ -32,7 +32,7 @@ class Azure_Deployment():
         self.subscription   = util.run_cmd(cmd_list).stdout.strip()
 
         # Default to development deployment.
-        self.name           = 'p1-dev'
+        self.name           = 'p1-dev-2'
 
         # Resource group.
         self.rg_name        = f'rg-{self.name}'
@@ -335,9 +335,25 @@ class Azure_Deployment():
             result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
             # TODO: Print out command output (a json of the new VNet).
 
-            # TODO: Check if I really do need to update the NSG for this VM to allow port 8080.
+            # Update NSG rule to allow HTTP.
+            cmd_list = [
+                'az', 'network', 'nsg', 'rule', 'create',
+                '--resource-group',             self.rg_name,
+                '--nsg-name',                   f'{self.vm_jwt_auth.name}NSG',
+                # Rule params.
+                '--name',                       'Allow_FastAPI_HTTP_connections',
+                '--description',                'Used to access the JWT auth. VM.',
+                '--priority',                   '200',
+                '--direction',                  'Inbound',
+                '--access',                     'Allow',
+                '--protocol',                   'Tcp',
+                '--destination-port-ranges',    '8080',
+                # All other params default to '*', wildcard for all.
 
-            # TODO: Use bootstrapping file.
+                # TODO: Check if we really want to output as table, vs json vs tsv
+                '--output', 'table'
+            ]
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
 
             # Get bootstrap file path.
             script_dir              = os.path.dirname(os.path.abspath(__file__))
