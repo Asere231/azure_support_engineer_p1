@@ -40,6 +40,9 @@ class Azure_Deployment():
         # Virtual network.
         self.vnet_name      = f'vnet-{self.name}'
         self.vnet_netip     = '10.0.0.0/16'
+
+        # Network security group.
+        self.nsg_auth_name  = f'nsg-{self.name}-jwt-auth'
         
         # Subnets for our VNet.
         # JWT Authentication.
@@ -84,7 +87,7 @@ class Azure_Deployment():
         ]
         needs_create = False
         try:
-            result = util.run_cmd(cmd_list, False, False)
+            result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=False)
             print(util.f.info('Info') + f': RG {util.f.item(self.rg_name)} already exists. Skipping recreation')
             # TODO: Probably ask if the user wants to rename this deployment, 
             # or override the existing RG and its resources.
@@ -105,7 +108,7 @@ class Azure_Deployment():
             # TODO: Check if we really want to output as table, vs json vs tsv
         ]
         if needs_create:
-            result = util.run_cmd(cmd_list, True)
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
             # TODO: Print out command output (a json of the new RG).
 
             # Setup member roles for project team members.
@@ -166,7 +169,7 @@ class Azure_Deployment():
         ]
         needs_create = False
         try:
-            result = util.run_cmd(cmd_list, False, False)
+            result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=False)
             print(util.f.info('Info') + f': VNet {util.f.item(self.vnet_name)} already exists. Skipping recreation')
             # TODO: Probably ask if the user wants to rename this deployment, 
             # or override the existing VNet.
@@ -189,12 +192,85 @@ class Azure_Deployment():
             '--subnet-name',        self.subnet_auth.name,
             '--subnet-prefixes',    self.subnet_auth.netip,
 
-            '--output', 'table'
             # TODO: Check if we really want to output as table, vs json vs tsv
+            '--output', 'table'
         ]
         if needs_create:
             result = util.run_cmd(cmd_list, True)
             # TODO: Print out command output (a json of the new VNet).
+
+        # Setup NSG.
+        needs_create = False
+        # Has NSG already?
+        # Should output NSG info as a json, if it already exists.
+        # Else an error with Code: ResourceNotFound will be returned.
+        cmd_list = [
+            'az', 'network', 'nsg', 'show',
+            '--resource-group', self.rg_name,
+            '--name',           self.nsg_auth_name
+        ]
+        try:
+            result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=False)
+            print(util.f.info('Info') + f': NSG {util.f.item(self.nsg_auth_name)} already exists. Skipping recreation')
+            # TODO: Probably ask if the user wants to rename this deployment, 
+            # or override the existing NSG.
+        except subprocess.CalledProcessError as e:
+            if re.search(r'(ResourceNotFound)', e.stderr):
+                print(util.f.info('Info') + f': NSG {util.f.item(self.nsg_auth_name)} not found')
+                needs_create = True
+            else:
+                print(util.f.error('Error') + ': Uncaught CalledProcessError ' + util.f.item(f'{e.returncode}'))
+                raise e
+        # Create NSG. For more info see
+        # https://learn.microsoft.com/en-us/cli/azure/network/nsg?view=azure-cli-latest 
+        cmd_list = [
+            'az', 'network', 'nsg', 'create',
+            '--resource-group',     self.rg_name,
+            '--name',               self.nsg_auth_name,
+
+            # TODO: Check if we really want to output as table, vs json vs tsv
+            '--output', 'table'
+        ]
+        if needs_create:
+            result = util.run_cmd(cmd_list, True)
+            # TODO: Print out command output (a json of the new VNet).
+
+            # Then, we need to create our NSG rules.
+            # TODO: Use a Pydatic model and new NSG class member to store rules
+            # in a list for more easy deployment and editing, instead of hard
+            # coding here...
+            cmd_list = [
+                'az', 'network', 'nsg', 'rule', 'create',
+                '--resource-group',             self.rg_name,
+                '--nsg-name',                   self.nsg_auth_name,
+                # Rule params.
+                '--name',                       'Allow_FastAPI_HTTP_connections',
+                '--description',                'Used to access the JWT auth. VM.',
+                '--priority',                   '200',
+                '--direction',                  'Inbound',
+                '--access',                     'Allow',
+                '--protocol',                   'Tcp',
+                '--destination-port-ranges',    '8000',
+                # All other params default to '*', wildcard for all.
+
+                # TODO: Check if we really want to output as table, vs json vs tsv
+                '--output', 'table'
+            ]
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+
+            # After creating the NSG, we need to assign it to the correct subnet.
+            cmd_list = [
+                'az', 'network', 'vnet', 'subnet', 'update',
+                '--resource-group',             self.rg_name,
+                '--name',                       self.subnet_auth.name,
+                '--vnet-name',                  self.vnet_name,
+                '--network-security-group',     self.nsg_auth_name,
+                # TODO: Check if we really want to output as table, vs json vs tsv
+                '--output', 'table'
+            ]
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+
+            # TODO: Setup routes between future subnets.
 
         # TODO: Setup with correct subnets, security groups, routes, etc.
         print('')
@@ -210,7 +286,7 @@ class Azure_Deployment():
                 '--output', 'tsv'
             ]
         needs_create = False
-        result = util.run_cmd(cmd_list, False, True)
+        result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=True)
         if result == None or not result.stdout.strip():
             print(util.f.info('Info') + f': VM {util.f.item(self.vm_jwt_auth.name)} not found')
             needs_create = True
@@ -229,14 +305,19 @@ class Azure_Deployment():
                 '--size',           self.vm_jwt_auth.size,
                 '--storage-sku',    self.vm_jwt_auth.storage_sku,
                 '--admin-username', self.vm_jwt_auth.admin_user,
+                # Network.
+                '--vnet-name',      self.vnet_name,
+                '--subnet',         self.vm_jwt_auth.subnet.name,
+                # Other.
                 '--boot-diagnostics-storage', '',
                 '--generate-ssh-keys',
-                '--output', 'json'
+                '--verbose', '--output', 'json'
             ]
-            result = util.run_cmd(cmd_list, True, False)
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
             # TODO: Print out command output (a json of the new VNet).
 
-        # TODO: Use bootstrapping file.
+            # TODO: Use bootstrapping file.
+            
         print('')
 
 # Create private endpoint server.
@@ -245,5 +326,15 @@ class Azure_Deployment():
 # Setup Azure resource monitoring.
 # TODO:
 
-test = Azure_Deployment()
-test.deploy_all()
+# TODO: Add main function, improve read-ablility of code.
+try:
+    test = Azure_Deployment()
+    test.deploy_all()
+except Exception as e:
+    print(util.f.error('Error') + ': Failed to deploy project 1. Attempting to clean up all resources.')
+    cmd_list = [
+        'az', 'group', 'delete',
+        '--name', test.rg_name,
+        '--no-wait', '--yes'
+    ]
+    result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=True)

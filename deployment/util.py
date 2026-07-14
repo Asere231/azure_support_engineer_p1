@@ -35,6 +35,7 @@ def run_cmd(cmd_list, print_cmd=False, allow_fail=True):
     except subprocess.CalledProcessError as e:
         if allow_fail:
             return None
-        print(f.error('Error') + ': Command ' + f.item(' '.join(cmd_list)) + ' failed')
-        print('Returned (' + f.warn(f'{e.returncode}') + '): ' + f.warn(f'{e.stderr}'))
+        if print_cmd:
+            print(f.error('Error') + ': Command ' + f.item(' '.join(cmd_list)) + ' failed')
+            print('Returned (' + f.warn(f'{e.returncode}') + '): ' + f.warn(f'{e.stderr}'))
         raise e
