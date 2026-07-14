@@ -1,7 +1,7 @@
-service:
+services:
   db:
     image: postgres:15-alpine 
-    container-name: database-postgres
+    container_name: database-postgres
     environment:
       POSTGRES_DB_USER: "postgres"
       POSTGRES_DB_PASSWORD: "secure"
@@ -21,19 +21,18 @@ service:
 
   web:
     build: .
-    container-name: fast-api
+    container_name: fast-api
     ports:
       - "8080:8080"
 
     environment:
-      DB_HOST=db
-      DB_NAME=users
-      DB_USER=postgres
-      DB_PASSWORD=secure
+      - DB_HOST=db
+      - DB_NAME=users
+      - DB_USER=postgres
+      - DB_PASSWORD=secure
 
     depends_on:
-      db:
-        condition: service_healthy
+      - db
 
 volumes:
   pgdata:

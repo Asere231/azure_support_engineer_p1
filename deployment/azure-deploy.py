@@ -1,4 +1,5 @@
 import subprocess
+import os
 import re
 import json
 from pydantic import BaseModel
@@ -250,7 +251,25 @@ class Azure_Deployment():
                 '--direction',                  'Inbound',
                 '--access',                     'Allow',
                 '--protocol',                   'Tcp',
-                '--destination-port-ranges',    '8000',
+                '--destination-port-ranges',    '8080',
+                # All other params default to '*', wildcard for all.
+
+                # TODO: Check if we really want to output as table, vs json vs tsv
+                '--output', 'table'
+            ]
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+            cmd_list = [
+                'az', 'network', 'nsg', 'rule', 'create',
+                '--resource-group',             self.rg_name,
+                '--nsg-name',                   self.nsg_auth_name,
+                # Rule params.
+                '--name',                       'Allow_SSH',
+                '--description',                'passes ssh through',
+                '--priority',                   '110',
+                '--direction',                  'Inbound',
+                '--access',                     'Allow',
+                '--protocol',                   'Tcp',
+                '--destination-port-ranges',    '22',
                 # All other params default to '*', wildcard for all.
 
                 # TODO: Check if we really want to output as table, vs json vs tsv
@@ -316,8 +335,28 @@ class Azure_Deployment():
             result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
             # TODO: Print out command output (a json of the new VNet).
 
+            # TODO: Check if I really do need to update the NSG for this VM to allow port 8080.
+
             # TODO: Use bootstrapping file.
-            
+
+            # Get bootstrap file path.
+            script_dir              = os.path.dirname(os.path.abspath(__file__))
+            source_bootstrap_path   = os.path.join(script_dir, 'bootstrap_auth_jwt.sh')
+
+            cmd_list = [
+                'az', 'vm', 'run-command', 'invoke',
+                '--resource-group', self.rg_name,
+                '--name',           self.vm_jwt_auth.name,
+                '--command-id',     'RunShellScript', 
+                '--scripts',        f'@{source_bootstrap_path}',
+                '--query',          'value[0].message',
+                # TODO: Check if we really want to output as table, vs json vs tsv
+                '--output',         'table'
+            ]
+            # TODO: Swap bootstrap_auth_jwt.sh to use SCP to transfer files instead of cloning
+            # the entire project git repo.
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+
         print('')
 
 # Create private endpoint server.
