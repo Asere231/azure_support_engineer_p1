@@ -1,0 +1,6 @@
+services:
+  web:
+    build: .
+    container_name: microservice_web_app
+    ports:
+      - "8081:8081"
