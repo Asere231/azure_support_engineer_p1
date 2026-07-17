@@ -1,0 +1,8 @@
+# Project virtual environment requirments and setup.
+
+# To create .venv, run 'python3 -m venv .venv' (from project directory).
+# To activate .venv, run 'source .venv/bin/activate'
+# To install requirements, run 'pip install -r python-requirements.txt'
+
+# Dependencies:
+pydantic
