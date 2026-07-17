@@ -1,6 +1,7 @@
 import time
+import socket
 import logging
-from fastapi import FastAPI, Request, HTTPException, status, Depends
+from fastapi import FastAPI, Request, HTTPException, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, Field
@@ -55,3 +56,11 @@ async def check_service_health(payload: ServicePayload):
 @app.get("/health")
 async def get_app_health():
     return {"status": "ok"}
+
+@app.get("/host")
+async def get_host(request: Request):
+    return {
+        "status": "ok",
+        "served_by": socket.gethostname(),
+        "your_ip_as_seen_by_backend": request.client.host
+    }
