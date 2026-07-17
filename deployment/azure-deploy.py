@@ -32,7 +32,7 @@ class Azure_Deployment():
         self.subscription   = util.run_cmd(cmd_list).stdout.strip()
 
         # Default to development deployment.
-        self.name           = 'p1-dev22'
+        self.name           = 'p1-dev'
 
         # Resource group.
         self.rg_name        = f'rg-{self.name}'
@@ -47,22 +47,26 @@ class Azure_Deployment():
         
         # Subnets for our VNet.
         # JWT Authentication.
-        subnet1 = {
-            'name': 'jwt-authentication',
+        self.subnet_auth = Subnet.model_validate({
+            'name': 'sub-jwt-auth',
             'netip': '10.0.1.0/24'
-        }
-        self.subnet_auth = Subnet(**subnet1)
+        })
+        # Private endpoints subnet.
+        self.subnet_private = Subnet.model_validate({
+            'name': 'sub-private-eps',
+            'netip': '10.0.2.0/24'
+        })
 
         # Virtual machines.
         # JWT Authentication.
-        vm_auth = {
+        self.vm_jwt_auth = VM.model_validate({
             'name': 'vm-jwt-auth',
             'subnet': {
-                'name': subnet1['name'],
+                'name':  self.subnet_auth.name,
+                # TODO: Remove or use this static IP.
                 'netip': '10.0.1.2/32'
             }
-        }
-        self.vm_jwt_auth = VM(**vm_auth)
+        })
 
     def production_configs(self):
         # Azure production deployment configs.
@@ -197,8 +201,22 @@ class Azure_Deployment():
             '--output', 'table'
         ]
         if needs_create:
-            result = util.run_cmd(cmd_list, True)
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
             # TODO: Print out command output (a json of the new VNet).
+
+            # TODO: Instead of running this as a seperate command, add it to the VNet creation.
+            # I did it this way to test adding a new subnet to an existing VNet.
+            cmd_list = [
+                'az', 'network', 'vnet', 'subnet', 'create',
+                '--resource-group',     self.rg_name,
+                '--vnet-name',          self.vnet_name,
+                # Subnet params.
+                '--name',               self.subnet_private.name,
+                '--address-prefixes',   self.subnet_private.netip
+                # TODO: Create additional NSG for this subnet and assicated with:
+                # '--network-security-group', self.SOME_NSG
+            ]
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
 
         # Setup NSG.
         needs_create = False
