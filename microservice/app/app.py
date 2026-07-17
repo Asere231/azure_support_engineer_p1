@@ -9,7 +9,12 @@ import subprocess
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-app = FastAPI(title="FastAPI Demo")
+app = FastAPI(
+    title="FastAPI Demo", 
+    servers=[
+        {"url": "http://20.220.71.25", "description": "Production (via Load Balancer)"},
+    ]
+)
 security = HTTPBearer()
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
