@@ -26,8 +26,8 @@ jobs:
         with:
           name: python-app
           path: |
-            microservices/
-            !microservices/antenv/
+            microservice/
+            !microservice/antenv/
 
   deploy:
     runs-on: ubuntu-latest
