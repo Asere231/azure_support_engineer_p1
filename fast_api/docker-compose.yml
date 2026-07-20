@@ -1,15 +1,14 @@
-
 services:
   db:
-    image: postgres:15-alpine 
+    image: postgres:15-alpine
     container_name: database-postgres
     environment:
-      POSTGRES_DB_USER: "postgres"
-      POSTGRES_DB_PASSWORD: "secure"
-      POSTGRES_DB_NAME: "users"
+      POSTGRES_DB: "users"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "secure"
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin_user -d metrics_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d users"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,20 +21,19 @@ services:
 
   web:
     build: .
-
     container_name: fast-api
     ports:
       - "8080:8080"
 
     environment:
-
-      - DB_HOST=db
-      - DB_NAME=users
-      - DB_USER=postgres
-      - DB_PASSWORD=secure
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=users
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secure
 
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
 volumes:
   pgdata:

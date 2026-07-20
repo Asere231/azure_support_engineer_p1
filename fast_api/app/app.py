@@ -24,7 +24,7 @@ class TokenResponseBody(BaseModel):
     access_token: str
     token_type: str
 
-async def validate_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def ensure_token_is_valid(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token_str = credentials.credentials
     payload = validate_token(token_str)
     return {"identity": payload.get("sub")}
@@ -44,7 +44,10 @@ async def login(payload: AuthRequestBody):
         user_dao.validate_user(username=payload.username, password=payload.password)
 
         response_token = create_token(username=payload.username)
-        return response_token
+        return {
+            "access_token": response_token,
+            "token_type": "bearer"
+        }
     except InvalidCredentialsError as e:
         logging.error("Invalid credentials")
         return HTTPException(status_code=401, detail=str(e))
