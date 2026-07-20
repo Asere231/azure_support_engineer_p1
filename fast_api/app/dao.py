@@ -28,16 +28,13 @@ class UserDAO:
         except Exception as err:
             logging.critical(f"Failed to connect to PostgreSQL database: {err}")
             raise DatabaseConnectionError("Could not connect to the database.")
-        finally:
-            if connection:
-                connection.close()
 
 
     def _ensure_table_exists(self):
         connection = None
         cursor = None
         try:
-            connection = psycopg2._get_connection()
+            connection = self._get_connection()
             cursor = connection.cursor()
 
             cursor.execute("""
@@ -96,7 +93,7 @@ class UserDAO:
 
             hashed_password = self._hash_password(password)
 
-            cursor.execute(""""
+            cursor.execute("""
                 SELECT username, password_hash FROM users WHERE username = %s and password_hash = %s""", (username, hashed_password)
             )
 
