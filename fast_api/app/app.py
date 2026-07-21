@@ -1,6 +1,6 @@
 import time
 import logging
-from fastapi import FastAPI, status, HTTPException, Request, Depends, Header
+from fastapi import FastAPI, status, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -53,13 +53,9 @@ async def login(payload: AuthRequestBody):
         return HTTPException(status_code=401, detail=str(e))
     
 @app.get("/validate")
-async def validate(authorization: str = Header(...)):
+async def validate(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        # Expecting "Bearer <token>"
-        scheme, _, token = authorization.partition(" ")
-        if scheme.lower() != "bearer" or not token:
-            raise HTTPException(status_code=401, detail="Invalid Authorization header format")
-        
+        token = credentials.credentials
         payload = validate_token(token)
         return {"valid": True, "sub": payload.get("sub")}
     except HTTPException:
