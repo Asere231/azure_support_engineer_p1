@@ -24,6 +24,8 @@ class TokenResponseBody(BaseModel):
     access_token: str
     token_type: str
 
+# Middleware Logger goes here.
+
 async def ensure_token_is_valid(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token_str = credentials.credentials
     payload = validate_token(token_str)
