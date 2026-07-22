@@ -1,10 +1,10 @@
 {
     "members": [
         {
-            "user": "Example Name",
+            "user": "Bryan",
             "notes": "For managing and testing new features on project 1.",
             "--role": "Contributor",
-            "--assignee": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+            "--assignee": "e7b21569-ab18-41de-b33e-7802f3c07912"
         }
     ]
 }

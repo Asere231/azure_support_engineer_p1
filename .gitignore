@@ -2,3 +2,4 @@
 # during deployment and bootstrapping here.
 deployment/roles.json
 deployment/__pycache__
+deployment/temp/*
