@@ -32,7 +32,7 @@ class Azure_Deployment():
         self.subscription   = util.run_cmd(cmd_list).stdout.strip()
 
         # Default to development deployment.
-        self.name           = 'p1-dev-2'
+        self.name           = 'p1-dev'
 
         # Resource group.
         self.rg_name        = f'rg-{self.name}'
@@ -47,22 +47,37 @@ class Azure_Deployment():
         
         # Subnets for our VNet.
         # JWT Authentication.
-        subnet1 = {
-            'name': 'jwt-authentication',
+        self.subnet_auth = Subnet.model_validate({
+            'name': 'sub-jwt-auth',
             'netip': '10.0.1.0/24'
-        }
-        self.subnet_auth = Subnet(**subnet1)
+        })
+        # Private endpoints subnet.
+        self.subnet_private = Subnet.model_validate({
+            'name': 'sub-private-eps',
+            'netip': '10.0.2.0/24'
+        })
 
         # Virtual machines.
         # JWT Authentication.
-        vm_auth = {
+        self.vm_jwt_auth = VM.model_validate({
             'name': 'vm-jwt-auth',
             'subnet': {
-                'name': subnet1['name'],
+                'name':  self.subnet_auth.name,
+                # TODO: Remove or use this static IP.
                 'netip': '10.0.1.2/32'
             }
-        }
-        self.vm_jwt_auth = VM(**vm_auth)
+        })
+
+        # Log analytics workspace.
+        self.law_name       = f'law_{self.name}'
+
+        # Diagnostic settings.
+        self.ds_vnet_name    = f'ds_{self.name}_vnet'
+        self.ds_nsg_name    = f'ds_{self.name}_nsg'
+
+        # Data collection settings.
+        self.dcr_vm_jwt_auth_name = f'dcr_jwt_auth_vm'
+        self.dc_vm_jwt_auth_name = f'dc_jwt_auth_vm'
 
     def production_configs(self):
         # Azure production deployment configs.
@@ -197,8 +212,22 @@ class Azure_Deployment():
             '--output', 'table'
         ]
         if needs_create:
-            result = util.run_cmd(cmd_list, True)
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
             # TODO: Print out command output (a json of the new VNet).
+
+            # TODO: Instead of running this as a seperate command, add it to the VNet creation.
+            # I did it this way to test adding a new subnet to an existing VNet.
+            cmd_list = [
+                'az', 'network', 'vnet', 'subnet', 'create',
+                '--resource-group',     self.rg_name,
+                '--vnet-name',          self.vnet_name,
+                # Subnet params.
+                '--name',               self.subnet_private.name,
+                '--address-prefixes',   self.subnet_private.netip
+                # TODO: Create additional NSG for this subnet and assicated with:
+                # '--network-security-group', self.SOME_NSG
+            ]
+            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
 
         # Setup NSG.
         needs_create = False
@@ -327,6 +356,7 @@ class Azure_Deployment():
                 # Network.
                 '--vnet-name',      self.vnet_name,
                 '--subnet',         self.vm_jwt_auth.subnet.name,
+                '--nsg',            '',
                 # Other.
                 '--boot-diagnostics-storage', '',
                 '--generate-ssh-keys',
@@ -334,26 +364,6 @@ class Azure_Deployment():
             ]
             result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
             # TODO: Print out command output (a json of the new VNet).
-
-            # Update NSG rule to allow HTTP.
-            cmd_list = [
-                'az', 'network', 'nsg', 'rule', 'create',
-                '--resource-group',             self.rg_name,
-                '--nsg-name',                   f'{self.vm_jwt_auth.name}NSG',
-                # Rule params.
-                '--name',                       'Allow_FastAPI_HTTP_connections',
-                '--description',                'Used to access the JWT auth. VM.',
-                '--priority',                   '200',
-                '--direction',                  'Inbound',
-                '--access',                     'Allow',
-                '--protocol',                   'Tcp',
-                '--destination-port-ranges',    '8080',
-                # All other params default to '*', wildcard for all.
-
-                # TODO: Check if we really want to output as table, vs json vs tsv
-                '--output', 'table'
-            ]
-            result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
 
             # Get bootstrap file path.
             script_dir              = os.path.dirname(os.path.abspath(__file__))
@@ -380,6 +390,155 @@ class Azure_Deployment():
 
 # Setup Azure resource monitoring.
 # TODO:
+    def deploy_monitoring(self):
+        print(util.f.bold('Log Analytics Workspace Deployment'))
+        
+        # Okay, this project requires us to setup a log analytics workspace (LAW),
+        # record SLI using metrics. We should also setup application level monitoring
+        # with the use of the VM AZ extention. Once setup, (we should get log data from
+        # NSG traffic, Middleware on request like the JWT, VM metrics at both the platform
+        # and application level) use Kusto Query language to select/filter logs.
+
+        # TODO: LOOK INTO THE GRAFANA DASHBOARD, MAYBE SETUP A PROMETHEOUS CONTAINER TO
+        # CHECK VM HEALTH.
+
+        # TODO: Check for existing LAW, handle logic.
+        # Create new LAW for p1.
+        cmd_list = [
+            'az', 'monitor', 'log-analytics', 'workspace', 'create',
+            '--name',           self.law_name,
+            '--resource-group', self.rg_name,
+            '--retention-time', 30 # In days.
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+        # Get its ID.
+        cmd_list = [
+            'az', 'monitor', 'log-analytics', 'workspace', 'show',
+            '--name',           self.law_name,
+            '--resource-group', self.rg_name,
+            '--query'           'id',
+            '--output',         'tsv'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=False)
+        law_id = result.stdout.strip()
+
+        # Setup NSG log accesses.
+        # We first need to pull the id of the nsg we're going to add a monitoring rule for.
+        cmd_list = [
+            'az', 'network', 'nsg', 'show',
+            '--resource-group', self.rg_name,
+            '--name',           self.nsg_auth_name,
+            '--query',          'id',
+            '--output',         'tsv'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=False)
+        # Get ID of NSG now.
+        nsg_id = result.stdout.strip()
+
+        cmd_list = [
+            'az', 'monitor', 'diagnostic-settings', 'create',
+            '--name',           self.ds_nsg_name,
+            '--resource',       nsg_id,
+            '--workspace',      self.law_name,
+            # TODO: Move category to self option for DS.
+            '--logs',             '[{"categoryGroup": "allLogs", "enabled": true}]'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+
+        # Setup VNet DS.
+        # We first need to pull the id of the VNet we're going to add a monitoring rule for.
+        cmd_list = [
+            'az', 'network', 'vnet', 'show',
+            '--resource-group', self.rg_name,
+            '--name',           self.vnet_name,
+            '--query',          'id',
+            '--output',         'tsv'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=False)
+        # Get ID of VNet now.
+        vnet_id = result.stdout.strip()
+
+        cmd_list = [
+            'az', 'monitor', 'diagnostic-settings', 'create',
+            '--name',           self.ds_vnet_name,
+            '--resource',       vnet_id,
+            '--workspace',      self.law_name,
+            # TODO: Move category to self option for DS.
+            '--logs',           '[{"categoryGroup": "allLogs", "enabled": true}]',
+            '--metrics',        '[{"category": "AllMetrics", "enabled": true}]'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+
+        # Alright now setup the AZ monitoring client for the JWT VM.
+        # TODO: Container concerns?
+        # Get VM ID.
+        cmd_list = [
+            'az', 'vm', 'show',
+            '--resource-group', self.rg_name,
+            '--name',           self.vm_jwt_auth.name,
+            '--query',          'id',
+            '--output',         'tsv'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=False)
+        vm_auth_id = result.stdout.strip()
+
+        # Create new data collection rule.
+
+        # Load our dcr_jwt_auth.json file, and update a few params before creating a temp
+        # file to use for DC creation.
+        file_path = 'deployment/dcr_jwt_auth.json'
+        with open(file_path, 'r') as file:
+            dcr_data = json.load(file)
+        dcr_data['location'] = f'"{self.rg_location}"'
+        dcr_data['destinations']['logAnalytics'][0]['workspaceResourceId'] = law_id
+        # Write to file.
+        with open('deployment/temp/dcr_jwt_auth.json', 'w') as file:
+            json.dump(dcr_data, file)
+
+        # Create.
+        cmd_list = [
+            'az', 'monitor', 'data-collection', 'rule', 'create',
+            '--resource-group', self.rg_name,
+            '--name',           self.dcr_vm_jwt_auth_name,
+            '--rule-file',      'deployment\\temp\\dcr_jwt_auth.json'
+        ]
+        # NOTE: Running this command for the first time might require entering a 'yes' to
+        # install required extentions. Can avoid this with by running 'az config set extension.dynamic_install_allow_preview=true'
+        result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+        # Cleanup temp file.
+        result = util.run_cmd(['rm', 'deployment/temp/dcr_jwt_auth.json'], print_cmd=False, allow_fail=False)
+        # Get DCR id.
+        cmd_list = [
+            'az', 'monitor', 'data-collection', 'rule', 'show',
+            '--resource-group', self.rg_name,
+            '--name',           self.dcr_vm_jwt_auth_name,
+            '--query',          'id',
+            '--output',         'tsv'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=False, allow_fail=False)
+        dcr_id = result.stdout.strip()
+
+        # Associate DCR to VM.
+        cmd_list = [
+            'az', 'monitor', 'data-collection', 'rule', 'association', 'create',
+            '--name',           self.dc_vm_jwt_auth_name,
+            '--resource',       vm_auth_id,
+            '--rule-id',        dcr_id,
+            '--kind',           'Linux'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+
+        # And Finally, add the vm extention to actaully get application level info.
+        cmd_list = [
+            'az', 'vm', 'extension',    'set',
+            '--resource-group',         self.rg_name,
+            '--vm-name',                self.vm_jwt_auth.name,
+            '--name',                   'AzureMonitorLinuxAgent',
+            '--publisher',              'Microsoft.Azure.Monitor'
+        ]
+        result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
+
+        print('')
 
 # TODO: Add main function, improve read-ablility of code.
 try:
