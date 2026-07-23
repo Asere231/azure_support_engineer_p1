@@ -12,7 +12,7 @@ class UserDAO:
         self.host = os.getenv("POSTGRES_HOST", "localhost")
         self.database = os.getenv("POSTGRES_DB", "postgres")
         self.user = os.getenv("POSTGRES_USER", "postgres")
-        self.password = os.getenv("POSTGRES_PASSWORD", "secret")
+        self.password = os.getenv("POSTGRES_PASSWORD", "secure")
         self._ensure_table_exists()
 
     def _get_connection(self):

@@ -6,3 +6,5 @@
 
 # Dependencies:
 pydantic
+azure-identity
+azure-monitor-ingestion

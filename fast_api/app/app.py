@@ -52,5 +52,5 @@ async def login(payload: AuthRequestBody):
         }
     except InvalidCredentialsError as e:
         logging.error("Invalid credentials")
-        return HTTPException(status_code=401, detail=str(e))
+        raise HTTPException(status_code=401, detail=str(e))
     

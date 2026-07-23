@@ -383,6 +383,15 @@ class Azure_Deployment():
             # the entire project git repo.
             result = util.run_cmd(cmd_list, print_cmd=True, allow_fail=False)
 
+            # TODO: Add DS rule for the application gateway. Also deploy it.
+
+            # TODO: Add DC Rule and DC endpoint for middleware logs to comefrom.
+
+            # DC endpoint... name of DCE, RG, Location.
+            # Add new LAW table for the jwt middleware.
+            # Update VM enviroment vars to point to our LAW/DCE.
+
+
         print('')
 
 # Create private endpoint server.

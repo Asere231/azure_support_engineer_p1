@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "7bca9c84e2a3928e1d2c4b5d6e7f8a90123456789abcdef0123456789abcdef")
 JWT_ALGORITHM = "HS256"
-TOKEN_EXPIRATION_MINUTES = 30
+TOKEN_EXPIRATION_MINUTES = 5
 
 def create_token(username: str) -> str:
     issued_at = datetime.now(timezone.utc)
